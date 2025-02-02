@@ -1,55 +1,64 @@
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-import time
-from selenium.common.exceptions import StaleElementReferenceException
+import imaplib
 
-# Function to initialize the Chrome WebDriver
-def initialize_driver():
-    options = webdriver.ChromeOptions()
-    options.add_argument("--start-maximized")  # Start maximized
-    driver = webdriver.Chrome(options=options)  # Remove executable_path
-    return driver
+# Gmail IMAP server details
+IMAP_SERVER = "imap.gmail.com"
 
-# Function to log in to Gmail
-def login_to_gmail(driver):
-    email = "linda.p@runxemaildeliver.com"
-    driver.get("https://mail.google.com/")
-    time.sleep(2)  # Wait for the page to load
-    email_field = driver.find_element(By.ID, "identifierId")
-    email_field.send_keys(email)
-    driver.find_element(By.ID, "identifierNext").click()
-    time.sleep(3)  # Wait for password field to appear
+# List of email accounts and their corresponding app passwords
+EMAIL_ACCOUNTS = [
+    {"email": "tmm003937@gmail.com", "password": "fekg mego jqlw pizn"},
+    {"email": "mta872679@gmail.com", "password": "dppb jbar acqq orqz"}
+]
 
-    # Give the user time to enter their password manually
-    print("Please enter your password in the browser. The script will continue after 30 seconds.")
-    time.sleep(30)  # Wait for 30 seconds
+def move_from_junk_to_inbox(mail):
+    # Select the Junk (Spam) folder
+    mail.select("[Gmail]/Spam")
 
-# Function to read unread emails
-def read_unread_emails(driver):
-    time.sleep(5)  # Wait for the inbox to load
-    unread_emails = driver.find_elements(By.XPATH, '//tr[@class="zA zE"]')
-    print(f"Found {len(unread_emails)} unread emails.")
+    # Search for all emails in the Junk folder
+    status, messages = mail.search(None, 'ALL')
+    email_ids = messages[0].split()
 
-    for _ in range(len(unread_emails)):
+    if len(email_ids) > 0:
+        print(f"Moving {len(email_ids)} emails from Junk to Inbox...")
+        for email_id in email_ids:
+            # Move each email from Junk to Inbox
+            mail.copy(email_id, "inbox")
+            mail.store(email_id, '+FLAGS', '\\Deleted')  # Mark as deleted from Spam folder
+        mail.expunge()  # Remove deleted emails
+
+def count_and_mark_unread_emails():
+    for account in EMAIL_ACCOUNTS:
         try:
-            unread_emails = driver.find_elements(By.XPATH, '//tr[@class="zA zE"]')  # Re-fetch unread emails
-            email = unread_emails[0]  # Click the first unread email
-            email.click()  # Click on the unread email
-            time.sleep(3)  # Wait for the email to open
-            
-            links = driver.find_elements(By.TAG_NAME, "a")  # Find all links in the email
-            for link in links:
-                print(f"Link found: {link.get_attribute('href')}")
-            
-            driver.back()  # Go back to the inbox
-            time.sleep(2)  # Wait for the inbox to load again
-        except StaleElementReferenceException:
-            print("StaleElementReferenceException caught. Re-fetching unread emails.")
-            continue  # Continue to the next unread email
+            email_account = account["email"]
+            email_password = account["password"]
 
-# Main function
+            print(f"Processing account: {email_account}")
+
+            # Connect to Gmail's IMAP server
+            mail = imaplib.IMAP4_SSL(IMAP_SERVER)
+            mail.login(email_account, email_password)
+
+            # Move emails from Junk (Spam) to Inbox
+            move_from_junk_to_inbox(mail)
+
+            # Select the inbox
+            mail.select("inbox")
+
+            # Search for all unread emails
+            status, messages = mail.search(None, 'UNSEEN')
+            email_ids = messages[0].split()
+
+            print(f"Unread Emails in {email_account}: {len(email_ids)}")
+
+            # Mark each unread email as read
+            for email_id in email_ids:
+                mail.store(email_id, '+FLAGS', '\\Seen')
+
+            # Close and logout
+            mail.close()
+            mail.logout()
+
+        except Exception as e:
+            print(f"Error processing {email_account}: {e}")
+
 if __name__ == "__main__":
-    driver = initialize_driver()
-    login_to_gmail(driver)
-    read_unread_emails(driver)
-    driver.quit()
+    count_and_mark_unread_emails()
